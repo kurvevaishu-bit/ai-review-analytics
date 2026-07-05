@@ -2,6 +2,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import os
 
 from database import SessionLocal, init_db, Product, Review
 from analysis.pipeline import process_review
@@ -20,6 +21,41 @@ def compute_analytics(db, product_id):
     reviews = db.query(Review).filter(Review.product_id == product_id).all()
     if not reviews:
         return None
+
+def seed_sample_data(db, max_products=5, max_reviews_per_product=15):
+    csv_path = os.path.join(os.path.dirname(__file__), "data", "1429_1.csv")
+    if not os.path.exists(csv_path):
+        st.sidebar.error(f"Sample dataset not found at {csv_path}")
+        return
+
+    df = pd.read_csv(csv_path, low_memory=False)
+    df = df.dropna(subset=["reviews.text", "name"])
+
+    top_products = df["name"].value_counts().head(max_products).index.tolist()
+
+    created = []
+    for product_name_raw in top_products:
+        clean = product_name_raw.split("\r\n")[0].split(",,,")[0].strip()[:150]
+
+        p = Product(name=clean, category="Amazon Devices")
+        db.add(p)
+        db.commit()
+        db.refresh(p)
+
+        subset = df[df["name"] == product_name_raw].head(max_reviews_per_product)
+        for _, row in subset.iterrows():
+            r = Review(
+                product_id=p.id,
+                text=str(row["reviews.text"]),
+                rating=row.get("reviews.rating")
+            )
+            r = process_review(r)
+            db.add(r)
+        db.commit()
+        created.append((p.id, clean))
+
+    st.sidebar.success(f"Created {len(created)} sample products!")
+    return created
 
     total = len(reviews)
     pos = sum(1 for r in reviews if r.sentiment_label == "positive")
@@ -68,6 +104,14 @@ db = get_db()
 products = get_all_products(db)
 product_options = {f"{p.id} — {p.name}": p.id for p in products}
 
+st.sidebar.subheader("Quick Start")
+if st.sidebar.button("🌱 Load Sample Data (Kaggle Amazon Reviews)"):
+    with st.spinner("Seeding sample products..."):
+        seed_sample_data(db)
+    st.rerun()
+
+st.sidebar.divider()
+
 st.sidebar.subheader("Select a Product")
 selected_label = st.sidebar.selectbox(
     "Existing products",
@@ -113,7 +157,7 @@ if st.sidebar.button("Upload & Analyze"):
             db.commit()
             st.sidebar.success(f"Inserted {count} reviews into product {upload_target_id}")
             st.rerun()
-
+            
 # ---------------- Main area ----------------
 st.title("AI-Powered Product Review Analytics")
 
