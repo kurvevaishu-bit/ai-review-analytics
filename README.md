@@ -18,7 +18,7 @@ A full-stack analytics platform that ingests product reviews, runs multi-method 
 
 ## Project Structure
 
-'''
+```bash
 
 ai_review_analytics/
 ├── backend/
@@ -46,8 +46,7 @@ ai_review_analytics/
 └── components/
 ├── SentimentChart.jsx
 └── TopicsChart.jsx
-
-'''
+```
 
 ## Setup & Installation
 
