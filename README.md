@@ -109,6 +109,14 @@ python backfill_topics.py
 - **Bing Liu Opinion Lexicon** — ~6,800 English words tagged positive/negative
 - **Consumer Reviews of Amazon Products** (Datafiniti, via Kaggle) — real reviews across 48 distinct Amazon products
 
+# AI-Powered Product Review Analytics System
+
+🔗 **Live Demo:** [https://ai-review-analytics-wryeielflwf7u3glcnutee.streamlit.app/](https://ai-review-analytics-wryeielflwf7u3glcnutee.streamlit.app/)
+
+*Note: The database resets on app restarts. Click "🌱 Load Sample Data" in the sidebar to populate it with sample Kaggle reviews.*
+
+A full-stack analytics platform that ingests product reviews, runs multi-method sentiment analysis, extracts key topics, and generates summaries — all through a FastAPI backend and a React dashboard.
+
 ## Notes
 
 - All NLP processing (sentiment, topics, summarization) runs **locally and free of cost** — no external AI API required
