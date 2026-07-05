@@ -8,3 +8,5 @@ anthropic
 vaderSentiment
 python-dotenv
 yake
+streamlit
+plotly
