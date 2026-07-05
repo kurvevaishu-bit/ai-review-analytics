@@ -1,8 +1,8 @@
 # streamlit_app.py
+import os
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import os
 
 from database import SessionLocal, init_db, Product, Review
 from analysis.pipeline import process_review
@@ -11,22 +11,77 @@ from analysis.free_summary import summarize_reviews_free
 st.set_page_config(page_title="AI Review Analytics", layout="wide")
 init_db()
 
+
 def get_db():
     return SessionLocal()
+
 
 def get_all_products(db):
     return db.query(Product).all()
 
+
+def products_with_review_counts(db, products):
+    result = {}
+    for p in products:
+        count = db.query(Review).filter(Review.product_id == p.id).count()
+        if count > 0:
+            result[f"{p.id} — {p.name} ({count} reviews)"] = p.id
+    return result
+
+
 def compute_analytics(db, product_id):
     reviews = db.query(Review).filter(Review.product_id == product_id).all()
+
     if not reviews:
         return None
+
+    total = len(reviews)
+    pos = sum(1 for r in reviews if r.sentiment_label == "positive")
+    neg = sum(1 for r in reviews if r.sentiment_label == "negative")
+    neu = total - pos - neg
+
+    lex_pos = sum(1 for r in reviews if r.lexicon_label == "positive")
+    lex_neg = sum(1 for r in reviews if r.lexicon_label == "negative")
+    lex_neu = total - lex_pos - lex_neg
+
+    topic_counts = {}
+    for r in reviews:
+        for t in (r.topics or "").split(","):
+            t = t.strip()
+            if t:
+                topic_counts[t] = topic_counts.get(t, 0) + 1
+
+    summary = summarize_reviews_free([r.text for r in reviews])
+
+    return {
+        "total_reviews": total,
+        "sentiment_breakdown": {"positive": pos, "negative": neg, "neutral": neu},
+        "lexicon_breakdown": {"positive": lex_pos, "negative": lex_neg, "neutral": lex_neu},
+        "top_topics": sorted(topic_counts.items(), key=lambda x: -x[1])[:10],
+        "ai_summary": summary,
+        "reviews": reviews,
+    }
+
+
+def pie_chart(data_dict, title):
+    df = pd.DataFrame(list(data_dict.items()), columns=["Sentiment", "Count"])
+    df = df[df["Count"] > 0]
+    if df.empty:
+        st.info(f"No data for {title}")
+        return
+    fig = px.pie(
+        df, names="Sentiment", values="Count", title=title,
+        color="Sentiment",
+        color_discrete_map={"positive": "#22c55e", "negative": "#ef4444", "neutral": "#94a3b8"}
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
 
 def seed_sample_data(db, max_products=5, max_reviews_per_product=15):
     csv_path = os.path.join(os.path.dirname(__file__), "data", "1429_1.csv")
     if not os.path.exists(csv_path):
         st.sidebar.error(f"Sample dataset not found at {csv_path}")
-        return
+        return None
 
     df = pd.read_csv(csv_path, low_memory=False)
     df = df.dropna(subset=["reviews.text", "name"])
@@ -57,52 +112,12 @@ def seed_sample_data(db, max_products=5, max_reviews_per_product=15):
     st.sidebar.success(f"Created {len(created)} sample products!")
     return created
 
-    total = len(reviews)
-    pos = sum(1 for r in reviews if r.sentiment_label == "positive")
-    neg = sum(1 for r in reviews if r.sentiment_label == "negative")
-    neu = total - pos - neg
-
-    lex_pos = sum(1 for r in reviews if r.lexicon_label == "positive")
-    lex_neg = sum(1 for r in reviews if r.lexicon_label == "negative")
-    lex_neu = total - lex_pos - lex_neg
-
-    topic_counts = {}
-    for r in reviews:
-        for t in (r.topics or "").split(","):
-            t = t.strip()
-            if t:
-                topic_counts[t] = topic_counts.get(t, 0) + 1
-
-    summary = summarize_reviews_free([r.text for r in reviews])
-
-    return {
-        "total_reviews": total,
-        "sentiment_breakdown": {"positive": pos, "negative": neg, "neutral": neu},
-        "lexicon_breakdown": {"positive": lex_pos, "negative": lex_neg, "neutral": lex_neu},
-        "top_topics": sorted(topic_counts.items(), key=lambda x: -x[1])[:10],
-        "ai_summary": summary,
-        "reviews": reviews,
-    }
-
-def pie_chart(data_dict, title):
-    df = pd.DataFrame(list(data_dict.items()), columns=["Sentiment", "Count"])
-    df = df[df["Count"] > 0]
-    if df.empty:
-        st.info(f"No data for {title}")
-        return
-    fig = px.pie(
-        df, names="Sentiment", values="Count", title=title,
-        color="Sentiment",
-        color_discrete_map={"positive": "#22c55e", "negative": "#ef4444", "neutral": "#94a3b8"}
-    )
-    st.plotly_chart(fig, use_container_width=True)
 
 # ---------------- Sidebar ----------------
 st.sidebar.title("📊 AI Review Analytics")
 
 db = get_db()
 products = get_all_products(db)
-product_options = {f"{p.id} — {p.name}": p.id for p in products}
 
 st.sidebar.subheader("Quick Start")
 if st.sidebar.button("🌱 Load Sample Data (Kaggle Amazon Reviews)"):
@@ -113,8 +128,9 @@ if st.sidebar.button("🌱 Load Sample Data (Kaggle Amazon Reviews)"):
 st.sidebar.divider()
 
 st.sidebar.subheader("Select a Product")
+product_options = products_with_review_counts(db, products)
 selected_label = st.sidebar.selectbox(
-    "Existing products",
+    "Existing products (with reviews)",
     options=["-- none --"] + list(product_options.keys())
 )
 selected_product_id = product_options.get(selected_label)
@@ -134,7 +150,9 @@ if st.sidebar.button("Create Product"):
         st.sidebar.error("Enter a product name first.")
 
 st.sidebar.subheader("Upload Reviews CSV")
-upload_target_id = st.sidebar.number_input("Target Product ID", min_value=1, step=1, value=selected_product_id or 1)
+upload_target_id = st.sidebar.number_input(
+    "Target Product ID", min_value=1, step=1, value=selected_product_id or 1
+)
 uploaded_file = st.sidebar.file_uploader("Choose CSV", type=["csv"])
 if st.sidebar.button("Upload & Analyze"):
     if uploaded_file is None:
@@ -157,7 +175,7 @@ if st.sidebar.button("Upload & Analyze"):
             db.commit()
             st.sidebar.success(f"Inserted {count} reviews into product {upload_target_id}")
             st.rerun()
-            
+
 # ---------------- Main area ----------------
 st.title("AI-Powered Product Review Analytics")
 
