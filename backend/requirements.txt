@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+sqlalchemy
+pydantic
+pandas
+python-multipart
+anthropic
+vaderSentiment
+python-dotenv
+yake
