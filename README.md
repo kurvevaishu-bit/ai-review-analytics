@@ -18,6 +18,8 @@ A full-stack analytics platform that ingests product reviews, runs multi-method 
 
 ## Project Structure
 
+'''
+
 ai_review_analytics/
 ├── backend/
 │   ├── main.py                  # FastAPI app & routes
@@ -44,6 +46,8 @@ ai_review_analytics/
 └── components/
 ├── SentimentChart.jsx
 └── TopicsChart.jsx
+
+'''
 
 ## Setup & Installation
 
